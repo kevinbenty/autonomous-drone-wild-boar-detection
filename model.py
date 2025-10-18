@@ -1,56 +1,72 @@
-from google.colab import files
-uploaded = files.upload()
+!pip install ultralytics --quiet
 
 import os
-dataset_zip = list(uploaded.keys())[0]
-print(f"Uploaded dataset: {dataset_zip}")
-
-from zipfile import ZipFile
-extract_to = '/content/wild_boar_dataset'
-with ZipFile(dataset_zip, 'r') as zip_ref:
-    zip_ref.extractall(extract_to)
-
-print("Dataset extracted to:", extract_to)
-print("Contents:", os.listdir(extract_to))
-
-!pip install ultralytics
-
+import glob
+import random
+import shutil
+from IPython.display import Image, display
 from ultralytics import YOLO
-import yaml
-print("YOLOv8 imported successfully!")
 
-data_config = {
-    'path': extract_to,
-    'train': f'{extract_to}/train',
-    'val': f'{extract_to}/valid',
-    'test': f'{extract_to}/test',
-    'nc': 1,
-    'names': ['wild_boar']
-}
+!unzip -q /content/wildboar_dataset.zip -d /content/wildboar_dataset
 
-yaml_path = '/content/wild_boar.yaml'
-with open(yaml_path, 'w') as file:
-    yaml.dump(data_config, file)
+dataset_path = "/content/wildboar_dataset"
+output_path = "/content/dataset"
 
-print("Dataset YAML file created at:", yaml_path)
+train_path = f"{output_path}/train"
+val_path = f"{output_path}/val"
+test_path = f"{output_path}/test"
 
-model = YOLO('yolov8s.pt')
-results = model.train(data=yaml_path, epochs=50, imgsz=640, batch=16, name='wild_boar_yolov8')
+for split in [train_path, val_path, test_path]:
+    os.makedirs(f"{split}/images", exist_ok=True)
+    os.makedirs(f"{split}/labels", exist_ok=True)
+
+images = glob.glob(f"{dataset_path}/images/*.jpg")
+data = [(img, img.replace("images", "labels").replace(".jpg", ".txt")) for img in images]
+random.shuffle(data)
+
+train_split = int(0.7 * len(data))
+val_split = int(0.2 * len(data))
+train_data = data[:train_split]
+val_data = data[train_split:train_split + val_split]
+test_data = data[train_split + val_split:]
+
+def move_files(pairs, dest):
+    for img, ann in pairs:
+        shutil.copy(img, f"{dest}/images/")
+        shutil.copy(ann, f"{dest}/labels/")
+
+move_files(train_data, train_path)
+move_files(val_data, val_path)
+move_files(test_data, test_path)
+
+yaml_content = f"""
+train: {train_path}/images
+val: {val_path}/images
+test: {test_path}/images
+
+nc: 1
+names: ['wildboar']
+"""
+
+with open(f"{output_path}/data.yaml", "w") as f:
+    f.write(yaml_content)
+
+model = YOLO('yolov8n.pt')
+model.train(
+    data=f"{output_path}/data.yaml",
+    epochs=50,
+    imgsz=640,
+    batch=16,
+    name="wildboar_detector",
+    device=0
+)
 
 metrics = model.val()
-print("Evaluation complete!")
+print(metrics)
 
-test_path = f"{extract_to}/test"
-model.predict(source=test_path, conf=0.25, save=True)
+test_image = glob.glob(f"{test_path}/images/*.jpg")[0]
+results = model.predict(source=test_image, save=True, conf=0.5)
+display(Image(filename=results[0].save_dir / os.path.basename(test_image)))
 
-import glob
-from IPython.display import Image, display
-
-output_dir = sorted(glob.glob('/content/runs/detect/*'))[-1]
-output_images = glob.glob(f"{output_dir}/*.jpg")
-
-if output_images:
-    print(f"Showing result from: {output_images[0]}")
-    display(Image(filename=output_images[0]))
-else:
-    print("No detection images found in:", output_dir)
+model.export(format="onnx")
+print("Model exported successfully.")
