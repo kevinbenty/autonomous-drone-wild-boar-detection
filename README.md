@@ -25,7 +25,9 @@ flowchart TD
     D -- Yes --> E["Loiter, run the deterrent for 6 s<br/>and circle 3 m around the spot"]
     D -- No --> G{"Obstacle closer<br/>than 1.5 m?"}
     G -- Yes --> H[Climb 5 m]
-    G -- No --> C
+    G -- No --> T{"Watched for 2 s?"}
+    T -- No --> C
+    T -- Yes --> F
     E --> F{More waypoints?}
     H --> F
     F -- Yes --> B
@@ -70,7 +72,7 @@ Put your trained model at `wild_boar_model.tflite`, add your waypoints to `missi
 python3 main.py --connect /dev/serial0 --mission mission.json
 ```
 
-Settings such as the detection threshold, the number of confirmation frames and the GPIO pins are constants at the top of `main.py`. Set `RTL_ON_DETECTION = True` to send the drone home on the first detection instead of deterring.
+Settings such as how long to watch at each waypoint (`WAYPOINT_WAIT_S`, 2 s by default), the detection threshold, the number of confirmation frames and the GPIO pins are constants at the top of `main.py`. Set `RTL_ON_DETECTION = True` to send the drone home on the first detection instead of deterring.
 
 ## Testing without flying
 
