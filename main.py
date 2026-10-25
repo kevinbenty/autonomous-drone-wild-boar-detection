@@ -19,6 +19,7 @@ ULTRASONIC_ECHO = 24
 MIN_OBSTACLE_DIST_CM = 150
 DETECTION_CONFIRMATIONS = 2
 RTL_ON_DETECTION = False
+WAYPOINT_WAIT_S = 2  # seconds to hover and watch at each waypoint before moving on
 
 CONNECTION_STRING = "/dev/serial0"
 
@@ -198,6 +199,9 @@ def main():
                     time.sleep(4)
                     ultra_thread.obstacle_event.clear()
                     break
+
+                if time.time() - start_wait > WAYPOINT_WAIT_S:
+                    break  # nothing found here, move on to the next waypoint
 
                 time.sleep(0.5)
 
